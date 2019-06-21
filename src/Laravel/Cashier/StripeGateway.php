@@ -526,7 +526,8 @@ class StripeGateway {
 	protected function usingMultipleSubscriptionApi($customer)
 	{
 		return ! isset($customer->subscription) &&
-                 count($customer->subscriptions) > 0 &&
+		 isset($customer->subscription->total_count) &&
+                 $customer->subscriptions->total_count > 0 &&
                  ! is_null($this->billable->getStripeSubscription());
 	}
 
