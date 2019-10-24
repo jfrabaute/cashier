@@ -1,454 +1,448 @@
-<?php namespace Laravel\Cashier;
+<?php
+
+namespace Laravel\Cashier;
 
 use Carbon\Carbon;
-use Illuminate\Support\Facades\View;
 use Illuminate\Filesystem\Filesystem;
-use Symfony\Component\Process\Process;
+use Illuminate\Support\Facades\View;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Process\Process;
 
-class Invoice {
+class Invoice
+{
+    /**
+     * The billable instance.
+     *
+     * @var \Laravel\Cashier\BillableInterface
+     */
+    protected $billable;
 
-	/**
-	 * The billable instance.
-	 *
-	 * @var \Laravel\Cashier\BillableInterface
-	 */
-	protected $billable;
+    /**
+     * The Stripe invoice instance.
+     *
+     * @var object
+     */
+    protected $stripeInvoice;
 
-	/**
-	 * The Stripe invoice instance.
-	 *
-	 * @var object
-	 */
-	protected $stripeInvoice;
+    /**
+     * The filesystem instance.
+     *
+     * @var \Illuminate\Filesystem\Filesystem
+     */
+    protected $files;
 
-	/**
-	 * The filesystem instance.
-	 *
-	 * @var \Illuminate\Filesystem\Filesystem
-	 */
-	protected $files;
+    /**
+     * Create a new invoice instance.
+     *
+     * @param \Laravel\Cashier\BillableInterface $billable
+     * @param  object
+     * @param mixed $invoice
+     */
+    public function __construct(BillableInterface $billable, $invoice)
+    {
+        $this->billable = $billable;
+        $this->files = new Filesystem();
+        $this->stripeInvoice = $invoice;
+    }
 
-	/**
-	 * Create a new invoice instance.
-	 *
-	 * @param  \Laravel\Cashier\BillableInterface  $billable
-	 * @param  object
-	 * @return void
-	 */
-	public function __construct(BillableInterface $billable, $invoice)
-	{
-		$this->billable = $billable;
-		$this->files = new Filesystem;
-		$this->stripeInvoice = $invoice;
-	}
+    /**
+     * Dynamically get values from the Stripe invoice.
+     *
+     * @param string $key
+     *
+     * @return mixed
+     */
+    public function __get($key)
+    {
+        return $this->stripeInvoice->{$key};
+    }
 
-	/**
-	 * Get the total amount for the line item in dollars.
-	 *
-	 * @return string
-	 */
-	public function dollars()
-	{
-		return $this->totalWithCurrency();
-	}
+    /**
+     * Dynamically set values on the Stripe invoice.
+     *
+     * @param string $key
+     * @param mixed  $value
+     */
+    public function __set($key, $value)
+    {
+        $this->stripeInvoice->{$key} = $value;
+    }
 
-	/**
-	 * Get the total amount for the line item in the currency symbol of your choice
-	 *
-	 * @param  string $symbol The Symbol you want to show
-	 * @return string
-	 */
-	public function totalWithCurrency()
-	{
-		if (starts_with($total = $this->total(), '-'))
-		{
-			return '-'.$this->billable->addCurrencySymbol(ltrim($total, '-'));
-		}
-		else
-		{
-			return $this->billable->addCurrencySymbol($total);
-		}
-	}
+    /**
+     * Get the total amount for the line item in dollars.
+     *
+     * @return string
+     */
+    public function dollars()
+    {
+        return $this->totalWithCurrency();
+    }
 
-	/**
-	 * Get the total of the invoice (after discounts).
-	 *
-	 * @return float
-	 */
-	public function total()
-	{
-		return $this->billable->formatCurrency($this->total);
-	}
+    /**
+     * Get the total amount for the line item in the currency symbol of your choice.
+     *
+     * @param string $symbol The Symbol you want to show
+     *
+     * @return string
+     */
+    public function totalWithCurrency()
+    {
+        if (starts_with($total = $this->total(), '-')) {
+            return '-' . $this->billable->addCurrencySymbol(ltrim($total, '-'));
+        }
 
-	/**
-	 * Get the total of the invoice (before discounts).
-	 *
-	 * @return float
-	 */
-	public function subtotal()
-	{
-		return $this->billable->formatCurrency($this->subtotal);
-	}
+        return $this->billable->addCurrencySymbol($total);
+    }
 
-	/**
-	 * Get all of the "invoice item" line items.
-	 *
-	 * @return array
-	 */
-	public function invoiceItems()
-	{
-		return $this->lineItemsByType('invoiceitem');
-	}
+    /**
+     * Get the total of the invoice (after discounts).
+     *
+     * @return float
+     */
+    public function total()
+    {
+        return $this->billable->formatCurrency($this->total);
+    }
 
-	/**
-	 * Get all of the "subscription" line items.
-	 *
-	 * @return array
-	 */
-	public function subscriptions()
-	{
-		return $this->lineItemsByType('subscription');
-	}
+    /**
+     * Get the total of the invoice (before discounts).
+     *
+     * @return float
+     */
+    public function subtotal()
+    {
+        return $this->billable->formatCurrency($this->subtotal);
+    }
 
-	/**
-	 * Get all of the line items by a given type.
-	 *
-	 * @param  string  $type
-	 * @return array
-	 */
-	public function lineItemsByType($type)
-	{
-		$lineItems = [];
+    /**
+     * Get all of the "invoice item" line items.
+     *
+     * @return array
+     */
+    public function invoiceItems()
+    {
+        return $this->lineItemsByType('invoiceitem');
+    }
 
-		if (isset($this->lines->data))
-		{
-			foreach ($this->lines->data as $line)
-			{
-				if ($line->type == $type)
-				{
-					$lineItems[] = new LineItem($this->billable, $line);
-				}
-			}
-		}
+    /**
+     * Get all of the "subscription" line items.
+     *
+     * @return array
+     */
+    public function subscriptions()
+    {
+        return $this->lineItemsByType('subscription');
+    }
 
-		return $lineItems;
-	}
+    /**
+     * Get all of the line items by a given type.
+     *
+     * @param string $type
+     *
+     * @return array
+     */
+    public function lineItemsByType($type)
+    {
+        $lineItems = [];
 
-	/**
-	 * Determine if the invoice has a discount.
-	 *
-	 * @return bool
-	 */
-	public function hasDiscount()
-	{
-		return $this->total > 0 && $this->subtotal != $this->total;
-	}
+        if (isset($this->lines->data)) {
+            foreach ($this->lines->data as $line) {
+                if ($line->type == $type) {
+                    $lineItems[] = new LineItem($this->billable, $line);
+                }
+            }
+        }
 
-	/**
-	 * Get the discount amount in dollars.
-	 *
-	 * @return string
-	 */
-	public function discountDollars()
-	{
-		return $this->discountCurrency();
-	}
+        return $lineItems;
+    }
 
-	/**
-	 * Get the discount amount with the currency symbol.
-	 *
-	 * @return string
-	 */
-	public function discountCurrency()
-	{
-		return $this->billable->addCurrencySymbol($this->discount());
-	}
+    /**
+     * Determine if the invoice has a discount.
+     *
+     * @return bool
+     */
+    public function hasDiscount()
+    {
+        return $this->total > 0 && $this->subtotal != $this->total;
+    }
 
-	/**
-	 * Get the discount amount.
-	 *
-	 * @return float
-	 */
-	public function discount()
-	{
-		setlocale(LC_MONETARY, $this->billable->getCurrencyLocale());
+    /**
+     * Get the discount amount in dollars.
+     *
+     * @return string
+     */
+    public function discountDollars()
+    {
+        return $this->discountCurrency();
+    }
 
-		return round(money_format('%i', ($this->subtotal / 100) - ($this->total / 100)), 2);
-	}
+    /**
+     * Get the discount amount with the currency symbol.
+     *
+     * @return string
+     */
+    public function discountCurrency()
+    {
+        return $this->billable->addCurrencySymbol($this->discount());
+    }
 
-	/**
-	 * Get the coupon code applied to the invoice.
-	 *
-	 * @return string|null
-	 */
-	public function coupon()
-	{
-		if (isset($this->stripeInvoice->discount))
-		{
-			return $this->discount->coupon->id;
-		}
-	}
+    /**
+     * Get the discount amount.
+     *
+     * @return float
+     */
+    public function discount()
+    {
+        setlocale(LC_MONETARY, $this->billable->getCurrencyLocale());
 
-	/**
-	 * Determine if the discount is a percentage.
-	 *
-	 * @return bool
-	 */
-	public function discountIsPercentage()
-	{
-		return ! is_null($this->percentOff());
-	}
+        return round(money_format('%i', ($this->subtotal / 100) - ($this->total / 100)), 2);
+    }
 
-	/**
-	 * Get the discount percentage for the invoice.
-	 *
-	 * @return int|null
-	 */
-	public function percentOff()
-	{
-		return $this->discount->coupon->percent_off;
-	}
+    /**
+     * Get the coupon code applied to the invoice.
+     *
+     * @return string|null
+     */
+    public function coupon()
+    {
+        if (isset($this->stripeInvoice->discount)) {
+            return $this->discount->coupon->id;
+        }
+    }
 
-	/**
-	 * Get the discount amount for the invoice.
-	 *
-	 * @return float|null
-	 */
-	public function amountOff()
-	{
-		if (isset($this->discount->coupon->amount_off))
-		{
-			return $this->billable->formatCurrency($this->discount->coupon->amount_off);
-		}
-	}
+    /**
+     * Determine if the discount is a percentage.
+     *
+     * @return bool
+     */
+    public function discountIsPercentage()
+    {
+        return !is_null($this->percentOff());
+    }
 
-	/**
-	 * Get a Carbon date for the invoice.
-	 *
-	 * @param  \DateTimeZone|string  $timezone
-	 * @return \Carbon\Carbon
-	 */
-	public function date($timezone = null)
-	{
-		$carbon = Carbon::createFromTimestamp($this->date);
+    /**
+     * Get the discount percentage for the invoice.
+     *
+     * @return int|null
+     */
+    public function percentOff()
+    {
+        return $this->discount->coupon->percent_off;
+    }
 
-		return $timezone ? $carbon->setTimezone($timezone) : $carbon;
-	}
+    /**
+     * Get the discount amount for the invoice.
+     *
+     * @return float|null
+     */
+    public function amountOff()
+    {
+        if (isset($this->discount->coupon->amount_off)) {
+            return $this->billable->formatCurrency($this->discount->coupon->amount_off);
+        }
+    }
 
-	/**
-	 * Get a human readable date for the invoice.
-	 *
-	 * @param  \DateTimeZone|string  $timezone
-	 * @return string
-	 */
-	public function dateString($timezone = null)
-	{
-		return $this->date()->toDayDateTimeString();
-	}
+    /**
+     * Get a Carbon date for the invoice.
+     *
+     * @param \DateTimeZone|string $timezone
+     *
+     * @return \Carbon\Carbon
+     */
+    public function date($timezone = null)
+    {
+        $carbon = Carbon::createFromTimestamp($this->date);
 
-	/**
-	 * Get the View instance for the invoice.
-	 *
-	 * @param  array  $data
-	 * @return \Illuminate\View\View
-	 */
-	public function view(array $data)
-	{
-		$data = array_merge($data, ['invoice' => $this, 'billable' => $this->billable]);
+        return $timezone ? $carbon->setTimezone($timezone) : $carbon;
+    }
 
-		return View::make('cashier::receipt', $data);
-	}
+    /**
+     * Get a human readable date for the invoice.
+     *
+     * @param \DateTimeZone|string $timezone
+     *
+     * @return string
+     */
+    public function dateString($timezone = null)
+    {
+        return $this->date()->toDayDateTimeString();
+    }
 
-	/**
-	 * Get the rendered HTML content of the invoice view.
-	 *
-	 * @param  array  $data
-	 * @return string
-	 */
-	public function render(array $data)
-	{
-		return $this->view($data)->render();
-	}
+    /**
+     * Get the View instance for the invoice.
+     *
+     * @param array $data
+     *
+     * @return \Illuminate\View\View
+     */
+    public function view(array $data)
+    {
+        $data = array_merge($data, ['invoice' => $this, 'billable' => $this->billable]);
 
-	/**
-	 * Create an invoice download response.
-	 *
-	 * @param  array   $data
-	 * @param  string  $storagePath
-	 * @return \Symfony\Component\HttpFoundation\Response
-	 */
-	public function download(array $data, $storagePath = null, array $options = [])
-	{
-		if (isset($options['filename']))
-		{
-			$filename = $options['filename'];
-		}
-		else
-		{
-			$filename = $this->getDownloadFilename($data['product']);
-		}
+        return View::make('cashier::receipt', $data);
+    }
 
-		$document = $this->writeInvoice($data, $storagePath);
+    /**
+     * Get the rendered HTML content of the invoice view.
+     *
+     * @param array $data
+     *
+     * @return string
+     */
+    public function render(array $data)
+    {
+        return $this->view($data)->render();
+    }
 
-		$response = new Response($this->files->get($document), 200, [
-			'Content-Description' => 'File Transfer',
-			'Content-Disposition' => 'attachment; filename="'.$filename.'"',
-			'Content-Transfer-Encoding' => 'binary',
-			'Content-Type' => 'application/pdf',
-		]);
+    /**
+     * Create an invoice download response.
+     *
+     * @param array  $data
+     * @param string $storagePath
+     *
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
+    public function download(array $data, $storagePath = null)
+    {
+        $filename = $this->getDownloadFilename($data['product']);
 
-		$this->files->delete($document);
+        $document = $this->writeInvoice($data, $storagePath);
 
-		return $response;
-	}
+        $response = new Response($this->files->get($document), 200, [
+            'Content-Description' => 'File Transfer',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Transfer-Encoding' => 'binary',
+            'Content-Type' => 'application/pdf',
+        ]);
 
-	/**
-	 * Write the raw PDF bytes for the invoice via PhantomJS.
-	 *
-	 * @param  array  $data
-	 * @param  string  $storagePath
-	 * @return string
-	 */
-	protected function writeInvoice(array $data, $storagePath)
-	{
-		// To properly capture a screenshot of the invoice view, we will pipe out to
-		// PhantomJS, which is a headless browser. We'll then capture a PNG image
-		// of the webpage, which will produce a very faithful copy of the page.
-		$viewPath = $this->writeViewForImaging($data, $storagePath);
+        $this->files->delete($document);
 
-		$this->getPhantomProcess($viewPath)
-							->setTimeout(10)->run();
+        return $response;
+    }
 
-		return $viewPath;
-	}
+    /**
+     * Get the PhantomJS process instance.
+     *
+     * @param string $viewPath
+     *
+     * @return \Symfony\Component\Process\Process
+     */
+    public function getPhantomProcess($viewPath)
+    {
+        $system = $this->getSystem();
 
-	/**
-	 * Write the view HTML so PhantomJS can access it.
-	 *
-	 * @param  array  $data
-	 * @param  string  $storagePath
-	 * @return string
-	 */
-	protected function writeViewForImaging(array $data, $storagePath)
-	{
-		$storagePath = $storagePath ?: storage_path().'/meta';
+        $phantom = __DIR__ . '/bin/' . $system . '/phantomjs' . $this->getExtension($system);
 
-		$this->files->put($path = $storagePath.'/'.md5($this->id).'.pdf', $this->render($data));
+        return new Process($phantom . ' invoice.js ' . $viewPath, __DIR__);
+    }
 
-		return $path;
-	}
+    /**
+     * Set the filesystem instance.
+     *
+     * @param  \Illuminate\Filesystem\Filesystem
+     *
+     * @return \Laravel\Cashier\Invoice
+     */
+    public function setFiles(Filesystem $files)
+    {
+        $this->files = $files;
 
-	/**
-	 * Get the PhantomJS process instance.
-	 *
-	 * @param  string  $viewPath
-	 * @return \Symfony\Component\Process\Process
-	 */
-	public function getPhantomProcess($viewPath)
-	{
-		$system = $this->getSystem();
+        return $this;
+    }
 
-		$phantom = __DIR__.'/bin/'.$system.'/phantomjs'.$this->getExtension($system);
+    /**
+     * Get the Stripe invoice object.
+     *
+     * @return object
+     */
+    public function getStripeInvoice()
+    {
+        return $this->stripeInvoice;
+    }
 
-		return new Process($phantom.' invoice.js '.$viewPath, __DIR__);
-	}
+    /**
+     * Write the raw PDF bytes for the invoice via PhantomJS.
+     *
+     * @param array  $data
+     * @param string $storagePath
+     *
+     * @return string
+     */
+    protected function writeInvoice(array $data, $storagePath)
+    {
+        // To properly capture a screenshot of the invoice view, we will pipe out to
+        // PhantomJS, which is a headless browser. We'll then capture a PNG image
+        // of the webpage, which will produce a very faithful copy of the page.
+        $viewPath = $this->writeViewForImaging($data, $storagePath);
 
-	/**
-	 * Get the filename for the invoice download.
-	 *
-	 * @param  string  $prefix
-	 * @return string
-	 */
-	protected function getDownloadFilename($prefix)
-	{
-		$prefix = ! is_null($prefix) ? $prefix.'_' : '';
+        $this->getPhantomProcess($viewPath)
+            ->setTimeout(10)->run();
 
-		return $prefix.$this->date()->month.'_'.$this->date()->year;
-	}
+        return $viewPath;
+    }
 
-	/**
-	 * Set the filesystem instance.
-	 *
-	 * @param  \Illuminate\Filesystem\Filesystem
-	 * @return \Laravel\Cashier\Invoice
-	 */
-	public function setFiles(Filesystem $files)
-	{
-		$this->files = $files;
+    /**
+     * Write the view HTML so PhantomJS can access it.
+     *
+     * @param array  $data
+     * @param string $storagePath
+     *
+     * @return string
+     */
+    protected function writeViewForImaging(array $data, $storagePath)
+    {
+        $storagePath = $storagePath ?: storage_path() . '/meta';
 
-		return $this;
-	}
+        $this->files->put($path = $storagePath . '/' . md5($this->id) . '.pdf', $this->render($data));
 
-	/**
-	 * Get the Stripe invoice object.
-	 *
-	 * @return object
-	 */
-	public function getStripeInvoice()
-	{
-		return $this->stripeInvoice;
-	}
+        return $path;
+    }
 
-	/**
-	 * Get the operating system for the current platform.
-	 *
-	 * @return string
-	 */
-	protected function getSystem()
-	{
-		$uname = strtolower(php_uname());
+    /**
+     * Get the filename for the invoice download.
+     *
+     * @param string $prefix
+     *
+     * @return string
+     */
+    protected function getDownloadFilename($prefix)
+    {
+        $prefix = !is_null($prefix) ? $prefix . '_' : '';
 
-		if (str_contains($uname, 'darwin'))
-		{
-			return 'macosx';
-		}
-		elseif (str_contains($uname, 'win'))
-		{
-			return 'windows';
-		}
-		elseif (str_contains($uname, 'linux'))
-		{
-			return PHP_INT_SIZE === 4 ? 'linux-i686' : 'linux-x86_64';
-		}
-		else
-		{
-			throw new \RuntimeException("Unknown operating system.");
-		}
-	}
+        return $prefix . $this->date()->month . '_' . $this->date()->year;
+    }
 
-	/**
-	 * Get the binary extension for the system.
-	 *
-	 * @param  string  $system
-	 * @return string
-	 */
-	protected function getExtension($system)
-	{
-		return $system == 'windows' ? '.exe' : '';
-	}
+    /**
+     * Get the operating system for the current platform.
+     *
+     * @return string
+     */
+    protected function getSystem()
+    {
+        $uname = strtolower(php_uname());
 
-	/**
-	 * Dynamically get values from the Stripe invoice.
-	 *
-	 * @param  string  $key
-	 * @return mixed
-	 */
-	public function __get($key)
-	{
-		return $this->stripeInvoice->{$key};
-	}
+        if (str_contains($uname, 'darwin')) {
+            return 'macosx';
+        }
+        if (str_contains($uname, 'win')) {
+            return 'windows';
+        }
+        if (str_contains($uname, 'linux')) {
+            return PHP_INT_SIZE === 4 ? 'linux-i686' : 'linux-x86_64';
+        }
 
-	/**
-	 * Dynamically set values on the Stripe invoice.
-	 *
-	 * @param  string  $key
-	 * @param  mixed   $value
-	 * @return void
-	 */
-	public function __set($key, $value)
-	{
-		$this->stripeInvoice->{$key} = $value;
-	}
+        throw new \RuntimeException('Unknown operating system.');
+    }
 
+    /**
+     * Get the binary extension for the system.
+     *
+     * @param string $system
+     *
+     * @return string
+     */
+    protected function getExtension($system)
+    {
+        return 'windows' == $system ? '.exe' : '';
+    }
 }
