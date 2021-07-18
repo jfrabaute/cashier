@@ -87,7 +87,12 @@ class Invoice
      */
     public function totalWithCurrency()
     {
-        if (starts_with($total = $this->total(), '-')) {
+        $total = $this->total();
+        if ('eur' === $this->stripeInvoice->currency) {
+            return $total . ' &euro;';
+        }
+
+        if (starts_with($total, '-')) {
             return '-' . $this->billable->addCurrencySymbol(ltrim($total, '-'));
         }
 
@@ -271,8 +276,6 @@ class Invoice
     /**
      * Get the View instance for the invoice.
      *
-     * @param array $data
-     *
      * @return \Illuminate\View\View
      */
     public function view(array $data)
@@ -285,8 +288,6 @@ class Invoice
     /**
      * Get the rendered HTML content of the invoice view.
      *
-     * @param array $data
-     *
      * @return string
      */
     public function render(array $data)
@@ -297,7 +298,6 @@ class Invoice
     /**
      * Create an invoice download response.
      *
-     * @param array  $data
      * @param string $storagePath
      *
      * @return \Symfony\Component\HttpFoundation\Response
@@ -363,7 +363,6 @@ class Invoice
     /**
      * Write the raw PDF bytes for the invoice via PhantomJS.
      *
-     * @param array  $data
      * @param string $storagePath
      *
      * @return string
@@ -384,7 +383,6 @@ class Invoice
     /**
      * Write the view HTML so PhantomJS can access it.
      *
-     * @param array  $data
      * @param string $storagePath
      *
      * @return string
